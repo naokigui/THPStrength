@@ -1,0 +1,168 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AthleteType {
+  BASKETBALL
+  VOLLEYBALL
+  TRACK_FIELD
+  DUNK_ATHLETE
+  HANDBALL
+  SOCCER
+  OTHER
+}
+
+enum JumpDominance {
+  ONE_FOOT
+  TWO_FOOT
+  BOTH
+}
+
+enum JumpDeficit {
+  FORCE_DEFICIT             // Déficit de Força Máxima (Necessita agachamentos pesados, RDL, Trap Bar)
+  ELASTICITY_SSC_DEFICIT     // Déficit Elástico/SSC (Necessita pliometria, depth jumps, pogo jumps)
+  TECHNIQUE_MECHANICAL_DEFICIT // Déficit de Técnica/Mecânica (Penúltimo passo, bloqueio, uso de braços)
+  BALANCED_OPTIMIZED        // Perfil equilibrado (Progressão conjugada avançada)
+}
+
+enum ProgramPhase {
+  ACCUMULATION_VOLUME       // Fase de Acumulação e Hipertrofia Funcional / Tendão
+  TRANSMUTATION_FORCE       // Fase de Transmutaçāo (Força Máxima para Força Explosiva)
+  REALIZATION_PEAKING       // Fase de Realização e Peaking (Máxima reatividade e altura)
+  PRIMING_GAME_DAY          // Preparação aguda pré-jogo (sem fadiga residual)
+}
+
+enum ExerciseCategory {
+  TENDON_ISOMETRIC          // Isometrias analgésicas e de rigidez tendínea
+  MAX_STRENGTH              // Esforço Máximo (Max Effort)
+  DYNAMIC_POWER             // Esforço Dinâmico / Velocidade (Dynamic Effort)
+  PLYOMETRIC_SSC            // Pliometria rápida e lenta (Stretch-Shortening Cycle)
+  PRIMING_POTENTIATION      // Overcoming isometrics e ativação neural aguda
+  CORE_POSTURE              // Anti-extensão e transferência de forças
+}
+
+model User {
+  id                String            @id @default(cuid())
+  email             String            @unique
+  name              String
+  athleteType       AthleteType       @default(BASKETBALL)
+  jumpDominance     JumpDominance     @default(TWO_FOOT)
+  heightCm          Float
+  weightKg          Float
+  standingReachCm   Float
+  currentVerticalCm Float
+  targetVerticalCm  Float
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  diagnostics       Diagnostic[]
+  workoutLogs       WorkoutLog[]
+  tendonLogs        TendonHealthLog[]
+
+  @@map("users")
+}
+
+model Diagnostic {
+  id                      String        @id @default(cuid())
+  userId                  String
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Testes de Campo
+  standingReachCm         Float
+  squatJumpCm             Float         // SJ (Salto a partir de 90° estático, sem contramovimento)
+  countermovementJumpCm   Float         // CMJ (Salto com contramovimento padrão)
+  approachJumpCm          Float         // Salto com corrida (Approach max vertical)
+  backSquat1RmKg          Float         // Carga máxima de agachamento 1RM
+  trapBarDeadliftKg       Float?        // Carga opcional de Trap Bar Deadlift
+  
+  // Índices Calculados pelo Motor THP
+  eurRatio                Float         // Eccentric Utilization Ratio = CMJ / SJ (Alvo: 1.10 - 1.15)
+  squatBwRatio            Float         // Squat / Peso Corporal (Alvo: >= 2.0x para saltadores de 2 pés)
+  approachDeficitPct      Float         // ((Approach - CMJ) / CMJ) * 100 (Alvo: +15% a +25%)
+  reactiveStrengthIndex   Float?        // RSI estimado ou tempo de contato
+  tendonPainScale         Int           @default(0) // 0-10 escala VISA-P adaptada
+
+  // Diagnóstico THP
+  dominantDeficit         JumpDeficit
+  recommendedPhase        ProgramPhase
+  aiBiomechanicalNotes    String?       @db.Text
+  createdAt               DateTime      @default(now())
+
+  @@map("diagnostics")
+}
+
+model Workout {
+  id                String            @id @default(cuid())
+  title             String
+  description       String
+  phase             ProgramPhase
+  dayType           String            // "Max Effort Lower", "Dynamic Effort Plyo", "Tendon Restoration"
+  weekNumber        Int               @default(1)
+  estimatedMinutes  Int               @default(60)
+  targetDeficit     JumpDeficit
+  
+  exercises         Exercise[]
+  workoutLogs       WorkoutLog[]
+  createdAt         DateTime          @default(now())
+
+  @@map("workouts")
+}
+
+model Exercise {
+  id                String            @id @default(cuid())
+  workoutId         String
+  workout           Workout           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  order             Int
+  name              String
+  category          ExerciseCategory
+  sets              Int
+  reps              String            // Ex: "3x45s hold", "5 reps @ 85%", "6 drops"
+  tempo             String?           // Ex: "Isometric Hold", "Explosive Max Intent", "3-0-1-0"
+  restSeconds       Int               @default(90)
+  targetRpe         Float             // RPE 1-10
+  cues              String            @db.Text // Instruções biomecânicas THP
+  tendonFriendly    Boolean           @default(true)
+
+  @@map("exercises")
+}
+
+model WorkoutLog {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutId         String
+  workout           Workout           @relation(fields: [workoutId], references: [id])
+  
+  completedAt       DateTime          @default(now())
+  durationMinutes   Int
+  overallRpe        Float             // 1-10
+  perceivedJumpHeight Float?          // Altura estimada ou pico da sessão
+  tendonDiscomfort  Int               @default(0) // 0-10
+  notes             String?           @db.Text
+
+  @@map("workout_logs")
+}
+
+model TendonHealthLog {
+  id                    String        @id @default(cuid())
+  userId                String
+  user                  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  loggedAt              DateTime      @default(now())
+  tendonLocation        String        // "PATELLAR_LEFT", "PATELLAR_RIGHT", "ACHILLES_LEFT", "ACHILLES_RIGHT", "QUAD_TENDON"
+  painScore             Int           // 0 = sem dor, 10 = dor incapacitante
+  morningStiffness      Int           // 1 = normal, 5 = rigidez severa ao acordar
+  singleLegSquatPain    Int           // 0-10 dor no agachamento unipodal a 90 graus (teste de carga)
+  protocolFollowed      String?       // "SPANISH_SQUAT_5X45S", "LEG_EXTENSION_HOLD", "WALL_SIT_HEAVY"
+  notes                 String?
+
+  @@map("tendon_health_logs")
+}

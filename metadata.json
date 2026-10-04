@@ -1,0 +1,6 @@
+{
+  "name": "THP Jump OS",
+  "description": "Sistema Operacional de Salto Vertical e Saúde Tendínea baseado na metodologia THP Strength e Sistema Conjugado Longo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
